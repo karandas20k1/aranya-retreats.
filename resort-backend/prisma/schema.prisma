@@ -1,0 +1,839 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PropertyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+  LOCKED
+}
+
+enum RoleKey {
+  SUPER_ADMIN
+  MANAGER
+  RECEPTIONIST
+  HOUSEKEEPER
+  MAINTENANCE
+  CUSTOMER
+}
+
+enum RoomOperationalStatus {
+  ACTIVE
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum HousekeepingStatus {
+  CLEAN
+  DIRTY
+  CLEANING
+  INSPECTION_PENDING
+  OUT_OF_SERVICE
+}
+
+enum MealPlan {
+  ROOM_ONLY
+  BREAKFAST
+  HALF_BOARD
+  FULL_BOARD
+}
+
+enum BookingHoldStatus {
+  ACTIVE
+  CONVERTED
+  EXPIRED
+  RELEASED
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLATION_REQUESTED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum BookingSource {
+  WEBSITE
+  FRONT_DESK
+  ADMIN
+}
+
+enum RoomAssignmentStatus {
+  ASSIGNED
+  CHECKED_IN
+  CHECKED_OUT
+  RELEASED
+}
+
+enum CancellationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum PaymentProvider {
+  RAZORPAY
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum HousekeepingTaskStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  INSPECTION_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum MaintenancePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum MaintenanceStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  READ
+}
+
+model Property {
+  id                   String                 @id @default(cuid())
+  name                 String
+  slug                 String                 @unique
+  status               PropertyStatus         @default(ACTIVE)
+  email                String?
+  phone                String?
+  addressLine1         String?
+  addressLine2         String?
+  city                 String?
+  state                String?
+  postalCode           String?
+  countryCode          String                 @default("IN") @db.Char(2)
+  timezone             String                 @default("Asia/Kolkata")
+  currency             String                 @default("INR") @db.Char(3)
+  createdAt            DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime               @updatedAt @db.Timestamptz(6)
+  users                User[]
+  userRoles            UserRole[]
+  guestProfiles        GuestProfile[]
+  roomTypes            RoomType[]
+  rooms                Room[]
+  amenities            Amenity[]
+  ratePlans            RatePlan[]
+  cancellationPolicies CancellationPolicy[]
+  promotions           Promotion[]
+  dailyRates           DailyRate[]
+  roomInventories      RoomInventory[]
+  bookingHolds         BookingHold[]
+  bookings             Booking[]
+  bookingItems         BookingItem[]
+  bookingNights        BookingNight[]
+  roomAssignments      RoomAssignment[]
+  cancellationRequests CancellationRequest[]
+  payments             Payment[]
+  paymentWebhookEvents PaymentWebhookEvent[]
+  refunds              Refund[]
+  invoices             Invoice[]
+  housekeepingTasks    HousekeepingTask[]
+  maintenanceRequests  MaintenanceRequest[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@index([status])
+}
+
+model User {
+  id                    String               @id @default(cuid())
+  propertyId            String?
+  email                 String?              @unique
+  normalizedEmail       String?              @unique
+  phone                 String?              @unique
+  passwordHash          String?
+  firstName             String
+  lastName              String
+  status                UserStatus           @default(ACTIVE)
+  emailVerifiedAt       DateTime?            @db.Timestamptz(6)
+  lastLoginAt           DateTime?            @db.Timestamptz(6)
+  createdAt             DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime             @updatedAt @db.Timestamptz(6)
+  property              Property?            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  userRoles             UserRole[]
+  grantedUserRoles      UserRole[]           @relation("RoleGrantor")
+  guestProfiles         GuestProfile[]
+  bookings              Booking[]            @relation("BookingCustomer")
+  bookingHolds          BookingHold[]
+  refreshTokens         RefreshToken[]
+  passwordResetTokens   PasswordResetToken[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]           @relation("AuditActor")
+  housekeepingTasks     HousekeepingTask[]   @relation("HousekeepingAssignee")
+  completedHousekeeping HousekeepingTask[]   @relation("HousekeepingCompleter")
+  maintenanceRequests   MaintenanceRequest[] @relation("MaintenanceAssignee")
+  completedMaintenance  MaintenanceRequest[] @relation("MaintenanceCompleter")
+  cancellationDecisions CancellationRequest[] @relation("CancellationDecider")
+  requestedCancellations CancellationRequest[] @relation("CancellationRequester")
+
+  @@index([propertyId, status])
+  @@index([lastName, firstName])
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  key         RoleKey    @unique
+  displayName String
+  description String?
+  createdAt   DateTime   @default(now()) @db.Timestamptz(6)
+  userRoles   UserRole[]
+}
+
+model UserRole {
+  id          String   @id @default(cuid())
+  userId      String
+  roleId      String
+  propertyId  String?
+  grantedById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  property    Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  grantedBy   User?    @relation("RoleGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, roleId, propertyId])
+  @@index([propertyId, roleId])
+}
+
+model GuestProfile {
+  id              String    @id @default(cuid())
+  propertyId      String
+  userId          String?
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  countryCode     String?   @db.Char(2)
+  marketingConsent Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookings        Booking[]
+  bookingHolds    BookingHold[]
+
+  @@unique([propertyId, userId])
+  @@index([propertyId, lastName, firstName])
+  @@index([propertyId, phone])
+  @@index([propertyId, email])
+}
+
+model RoomType {
+  id               String             @id @default(cuid())
+  propertyId       String
+  name             String
+  slug             String
+  description      String
+  maxAdults        Int
+  maxChildren      Int                 @default(0)
+  maxOccupancy     Int
+  bedConfiguration String
+  basePrice        Decimal             @db.Decimal(12, 2)
+  currency         String              @default("INR") @db.Char(3)
+  imageUrls        String[]            @default([])
+  minimumNights    Int                 @default(1)
+  maximumNights    Int?
+  active           Boolean             @default(true)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(6)
+  property         Property            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  rooms            Room[]
+  amenities        RoomTypeAmenity[]
+  dailyRates       DailyRate[]
+  inventories      RoomInventory[]
+  holdItems        BookingHoldItem[]
+  bookingItems     BookingItem[]
+  promotions       PromotionRoomType[]
+
+  @@unique([propertyId, slug])
+  @@index([propertyId, active])
+}
+
+model Room {
+  id                  String                @id @default(cuid())
+  propertyId          String
+  roomTypeId          String
+  roomNumber          String
+  floor               String?
+  operationalStatus   RoomOperationalStatus @default(ACTIVE)
+  housekeepingStatus  HousekeepingStatus    @default(CLEAN)
+  notes               String?
+  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime              @updatedAt @db.Timestamptz(6)
+  property            Property              @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  roomType            RoomType              @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  assignments         RoomAssignment[]
+  housekeepingTasks   HousekeepingTask[]
+  maintenanceRequests MaintenanceRequest[]
+
+  @@unique([propertyId, roomNumber])
+  @@unique([id, roomTypeId])
+  @@index([propertyId, roomTypeId, operationalStatus])
+  @@index([propertyId, housekeepingStatus])
+}
+
+model Amenity {
+  id          String             @id @default(cuid())
+  propertyId  String
+  name        String
+  slug        String
+  createdAt   DateTime           @default(now()) @db.Timestamptz(6)
+  property    Property           @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  roomTypes   RoomTypeAmenity[]
+
+  @@unique([propertyId, slug])
+  @@index([propertyId, name])
+}
+
+model RoomTypeAmenity {
+  roomTypeId String
+  amenityId  String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  amenity    Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([roomTypeId, amenityId])
+  @@index([amenityId])
+}
+
+model CancellationPolicy {
+  id                    String      @id @default(cuid())
+  propertyId            String
+  name                  String
+  description           String
+  freeCancellationHours Int         @default(0)
+  penaltyType           DiscountType?
+  penaltyValue          Decimal?    @db.Decimal(12, 2)
+  refundable            Boolean     @default(true)
+  active                Boolean     @default(true)
+  createdAt             DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime    @updatedAt @db.Timestamptz(6)
+  property              Property   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  ratePlans             RatePlan[]
+
+  @@unique([propertyId, name])
+  @@index([propertyId, active])
+}
+
+model RatePlan {
+  id                       String             @id @default(cuid())
+  propertyId               String
+  cancellationPolicyId     String?
+  name                     String
+  slug                     String
+  description              String?
+  mealPlan                 MealPlan           @default(ROOM_ONLY)
+  currency                 String             @default("INR") @db.Char(3)
+  advancePaymentPercent    Decimal            @default(100) @db.Decimal(5, 2)
+  minimumAdvanceHours      Int                @default(0)
+  active                   Boolean            @default(true)
+  createdAt                DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime           @updatedAt @db.Timestamptz(6)
+  property                 Property           @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  cancellationPolicy       CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id], onDelete: SetNull)
+  dailyRates               DailyRate[]
+  bookingItems             BookingItem[]
+
+  @@unique([propertyId, slug])
+  @@index([propertyId, active])
+}
+
+model Promotion {
+  id             String              @id @default(cuid())
+  propertyId     String
+  code           String
+  name           String
+  description    String?
+  discountType   DiscountType
+  discountValue  Decimal             @db.Decimal(12, 2)
+  startsAt       DateTime            @db.Timestamptz(6)
+  endsAt         DateTime            @db.Timestamptz(6)
+  minimumNights  Int                 @default(1)
+  usageLimit     Int?
+  usageCount     Int                 @default(0)
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
+  property       Property            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  roomTypes      PromotionRoomType[]
+  bookings       Booking[]
+
+  @@unique([propertyId, code])
+  @@index([propertyId, active, startsAt, endsAt])
+}
+
+model PromotionRoomType {
+  promotionId String
+  roomTypeId  String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  roomType    RoomType  @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, roomTypeId])
+  @@index([roomTypeId])
+}
+
+model DailyRate {
+  id          String   @id @default(cuid())
+  propertyId  String
+  roomTypeId  String
+  ratePlanId  String
+  rateDate    DateTime @db.Date
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("INR") @db.Char(3)
+  minimumStay Int?
+  maximumStay Int?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  ratePlan    RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([roomTypeId, ratePlanId, rateDate])
+  @@index([propertyId, rateDate])
+}
+
+model RoomInventory {
+  id                     String   @id @default(cuid())
+  propertyId             String
+  roomTypeId             String
+  inventoryDate          DateTime @db.Date
+  totalRooms             Int
+  maintenanceBlockedRooms Int    @default(0)
+  heldRooms              Int      @default(0)
+  bookedRooms            Int      @default(0)
+  version                Int      @default(0)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(6)
+  property               Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  roomType               RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([roomTypeId, inventoryDate])
+  @@index([propertyId, inventoryDate])
+}
+
+model BookingHold {
+  id             String           @id @default(cuid())
+  propertyId     String
+  userId         String?
+  guestProfileId String?
+  reference      String           @unique
+  checkIn        DateTime         @db.Date
+  checkOut       DateTime         @db.Date
+  status         BookingHoldStatus @default(ACTIVE)
+  expiresAt      DateTime         @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  property       Property         @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestProfile   GuestProfile?    @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
+  items          BookingHoldItem[]
+
+  @@index([propertyId, status, expiresAt])
+  @@index([userId, createdAt])
+  @@index([checkIn, checkOut])
+}
+
+model BookingHoldItem {
+  id          String      @id @default(cuid())
+  holdId      String
+  roomTypeId  String
+  quantity    Int
+  adults      Int
+  children    Int           @default(0)
+  hold        BookingHold  @relation(fields: [holdId], references: [id], onDelete: Cascade)
+  roomType    RoomType     @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([holdId, roomTypeId])
+  @@index([roomTypeId])
+}
+
+model Booking {
+  id                  String               @id @default(cuid())
+  propertyId          String
+  customerId          String?
+  guestProfileId      String
+  promotionId         String?
+  confirmationNumber  String               @unique
+  status              BookingStatus        @default(PENDING_PAYMENT)
+  source              BookingSource        @default(WEBSITE)
+  checkIn             DateTime             @db.Date
+  checkOut            DateTime             @db.Date
+  currency            String               @default("INR") @db.Char(3)
+  subtotal            Decimal              @db.Decimal(12, 2)
+  discountAmount      Decimal              @default(0) @db.Decimal(12, 2)
+  taxAmount           Decimal              @default(0) @db.Decimal(12, 2)
+  totalAmount         Decimal              @db.Decimal(12, 2)
+  amountPaid          Decimal              @default(0) @db.Decimal(12, 2)
+  paymentDueAt        DateTime?            @db.Timestamptz(6)
+  specialRequests     String?
+  cancellationReason  String?
+  confirmedAt         DateTime?            @db.Timestamptz(6)
+  checkedInAt         DateTime?            @db.Timestamptz(6)
+  checkedOutAt        DateTime?            @db.Timestamptz(6)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
+  property            Property             @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  customer            User?                @relation("BookingCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  guestProfile        GuestProfile         @relation(fields: [guestProfileId], references: [id], onDelete: Restrict)
+  promotion           Promotion?           @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  items               BookingItem[]
+  payments            Payment[]
+  invoice             Invoice?
+  roomAssignments     RoomAssignment[]
+  cancellationRequests CancellationRequest[]
+
+  @@index([propertyId, status, checkIn])
+  @@index([propertyId, checkOut])
+  @@index([customerId, createdAt])
+  @@index([guestProfileId, createdAt])
+}
+
+model BookingItem {
+  id                   String         @id @default(cuid())
+  propertyId           String
+  bookingId            String
+  roomTypeId           String
+  ratePlanId           String?
+  quantity             Int
+  adults               Int
+  children             Int            @default(0)
+  roomTypeNameSnapshot String
+  ratePlanNameSnapshot String?
+  mealPlanSnapshot     MealPlan       @default(ROOM_ONLY)
+  unitPriceSnapshot    Decimal        @db.Decimal(12, 2)
+  subtotal             Decimal        @db.Decimal(12, 2)
+  discountAmount       Decimal        @default(0) @db.Decimal(12, 2)
+  taxAmount            Decimal        @default(0) @db.Decimal(12, 2)
+  totalAmount          Decimal        @db.Decimal(12, 2)
+  currency             String         @default("INR") @db.Char(3)
+  cancellationSnapshot Json?
+  createdAt            DateTime       @default(now()) @db.Timestamptz(6)
+  property             Property       @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  booking              Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  roomType             RoomType       @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  ratePlan             RatePlan?      @relation(fields: [ratePlanId], references: [id], onDelete: SetNull)
+  nights               BookingNight[]
+  roomAssignments      RoomAssignment[]
+
+  @@unique([id, roomTypeId])
+  @@index([bookingId])
+  @@index([propertyId, roomTypeId])
+}
+
+model BookingNight {
+  id                 String      @id @default(cuid())
+  propertyId         String
+  bookingItemId      String
+  stayDate           DateTime    @db.Date
+  baseAmountSnapshot Decimal     @db.Decimal(12, 2)
+  discountSnapshot   Decimal     @default(0) @db.Decimal(12, 2)
+  taxSnapshot        Decimal     @default(0) @db.Decimal(12, 2)
+  totalSnapshot      Decimal     @db.Decimal(12, 2)
+  currency           String      @default("INR") @db.Char(3)
+  property           Property   @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  bookingItem        BookingItem @relation(fields: [bookingItemId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingItemId, stayDate])
+  @@index([propertyId, stayDate])
+}
+
+model RoomAssignment {
+  id            String                @id @default(cuid())
+  propertyId    String
+  bookingId     String
+  bookingItemId String
+  roomId        String
+  roomTypeId    String
+  checkIn       DateTime              @db.Date
+  checkOut      DateTime              @db.Date
+  status        RoomAssignmentStatus  @default(ASSIGNED)
+  assignedAt    DateTime              @default(now()) @db.Timestamptz(6)
+  checkedInAt   DateTime?             @db.Timestamptz(6)
+  checkedOutAt  DateTime?             @db.Timestamptz(6)
+  property      Property              @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  booking       Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingItem   BookingItem           @relation(fields: [bookingItemId, roomTypeId], references: [id, roomTypeId], onDelete: Cascade)
+  room          Room                  @relation(fields: [roomId, roomTypeId], references: [id, roomTypeId], onDelete: Restrict)
+
+  @@index([propertyId, roomId, checkIn, checkOut])
+  @@index([bookingId])
+  @@index([bookingItemId])
+}
+
+model CancellationRequest {
+  id             String                   @id @default(cuid())
+  propertyId     String
+  bookingId      String
+  requestedById  String?
+  decidedById    String?
+  status         CancellationRequestStatus @default(PENDING)
+  reason         String?
+  decisionNote   String?
+  requestedAt    DateTime                 @default(now()) @db.Timestamptz(6)
+  decidedAt      DateTime?                @db.Timestamptz(6)
+  property       Property                 @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  booking        Booking                  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  requestedBy    User?                    @relation("CancellationRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy      User?                    @relation("CancellationDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status, requestedAt])
+  @@index([bookingId])
+}
+
+model Payment {
+  id                    String          @id @default(cuid())
+  propertyId            String
+  bookingId             String
+  provider              PaymentProvider @default(RAZORPAY)
+  status                PaymentStatus   @default(CREATED)
+  amount                Decimal         @db.Decimal(12, 2)
+  currency              String          @default("INR") @db.Char(3)
+  gatewayOrderId        String?         @unique
+  gatewayPaymentId      String?         @unique
+  idempotencyKey        String          @unique
+  failureCode           String?
+  failureMessage        String?
+  verifiedAt            DateTime?       @db.Timestamptz(6)
+  createdAt             DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime        @updatedAt @db.Timestamptz(6)
+  property              Property        @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  booking               Booking         @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  refunds               Refund[]
+  webhookEvents         PaymentWebhookEvent[]
+
+  @@index([propertyId, status, createdAt])
+  @@index([bookingId, createdAt])
+}
+
+model PaymentWebhookEvent {
+  id             String          @id @default(cuid())
+  propertyId     String?
+  paymentId      String?
+  provider       PaymentProvider @default(RAZORPAY)
+  eventId        String          @unique
+  eventType      String
+  payload        Json
+  receivedAt     DateTime        @default(now()) @db.Timestamptz(6)
+  processedAt    DateTime?       @db.Timestamptz(6)
+  processingError String?
+  property       Property?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  payment        Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([paymentId, receivedAt])
+  @@index([eventType, receivedAt])
+}
+
+model Refund {
+  id                String       @id @default(cuid())
+  propertyId        String
+  paymentId         String
+  amount            Decimal      @db.Decimal(12, 2)
+  currency          String       @default("INR") @db.Char(3)
+  status            RefundStatus @default(PENDING)
+  gatewayRefundId   String?      @unique
+  idempotencyKey    String       @unique
+  reason            String?
+  processedAt       DateTime?    @db.Timestamptz(6)
+  createdAt         DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(6)
+  property          Property     @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([propertyId, status, createdAt])
+  @@index([paymentId])
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  propertyId      String
+  bookingId       String   @unique
+  invoiceNumber   String   @unique
+  issuedAt        DateTime @default(now()) @db.Timestamptz(6)
+  currency        String   @default("INR") @db.Char(3)
+  subtotal        Decimal  @db.Decimal(12, 2)
+  discountAmount  Decimal  @default(0) @db.Decimal(12, 2)
+  taxAmount       Decimal  @default(0) @db.Decimal(12, 2)
+  totalAmount     Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([propertyId, issuedAt])
+}
+
+model HousekeepingTask {
+  id             String                 @id @default(cuid())
+  propertyId     String
+  roomId         String
+  assignedToId   String?
+  completedById  String?
+  status         HousekeepingTaskStatus @default(OPEN)
+  taskType       String                 @default("CLEANING")
+  notes          String?
+  inspectionNote String?
+  createdAt      DateTime               @default(now()) @db.Timestamptz(6)
+  assignedAt     DateTime?              @db.Timestamptz(6)
+  completedAt    DateTime?              @db.Timestamptz(6)
+  property       Property               @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  room           Room                   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignedTo     User?                  @relation("HousekeepingAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  completedBy    User?                  @relation("HousekeepingCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status, createdAt])
+  @@index([roomId, status])
+  @@index([assignedToId, status])
+}
+
+model MaintenanceRequest {
+  id             String             @id @default(cuid())
+  propertyId     String
+  roomId         String
+  assignedToId   String?
+  completedById  String?
+  title          String
+  description    String
+  priority       MaintenancePriority @default(NORMAL)
+  status         MaintenanceStatus   @default(OPEN)
+  resolutionNote String?
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  assignedAt     DateTime?           @db.Timestamptz(6)
+  completedAt    DateTime?           @db.Timestamptz(6)
+  property       Property            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  room           Room                @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignedTo     User?               @relation("MaintenanceAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  completedBy    User?               @relation("MaintenanceCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status, priority])
+  @@index([roomId, status])
+  @@index([assignedToId, status])
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  propertyId  String?
+  userId      String?
+  channel     NotificationChannel
+  status      NotificationStatus  @default(QUEUED)
+  recipient   String
+  subject     String?
+  templateKey String
+  payload     Json
+  scheduledAt DateTime?           @db.Timestamptz(6)
+  sentAt      DateTime?           @db.Timestamptz(6)
+  readAt      DateTime?           @db.Timestamptz(6)
+  error       String?
+  createdAt   DateTime            @default(now()) @db.Timestamptz(6)
+  property    Property?           @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledAt])
+  @@index([userId, createdAt])
+  @@index([propertyId, createdAt])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  propertyId  String?
+  actorId     String?
+  action      String
+  entityType  String
+  entityId    String
+  before      Json?
+  after       Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  property    Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  actor       User?     @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+}
+
+model RefreshToken {
+  id                 String        @id @default(cuid())
+  userId             String
+  tokenHash          String        @unique
+  familyId           String
+  replacedByTokenId  String?       @unique
+  expiresAt          DateTime      @db.Timestamptz(6)
+  revokedAt          DateTime?     @db.Timestamptz(6)
+  createdAt          DateTime      @default(now()) @db.Timestamptz(6)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy         RefreshToken? @relation("RefreshRotation", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces           RefreshToken? @relation("RefreshRotation")
+
+  @@index([userId, expiresAt])
+  @@index([familyId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamptz(6)
+  usedAt     DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
